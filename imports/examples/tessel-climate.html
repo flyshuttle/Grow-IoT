@@ -1,0 +1,107 @@
+<!--
+  `tessel-climate`
+  An example of how to build an interface for an IoT device.
+-->
+<dom-module id="tessel-climate">
+  <template>
+    <style>
+:host {
+  display: block;
+  padding: 15px;
+}
+
+.pull-right {
+  float: right;
+}
+    </style>
+    <h2>Tessel Climate
+      <paper-icon-button class="pull-right"
+                       icon="settings"
+                       on-click="toggleDialog">
+      </paper-icon-button>
+    </h2>
+    <temperature-gauge temperature="{{temperature}}"></temperature-gauge>
+    <humidity-gauge humidity="{{humidity}}"></humidity-gauge>
+
+    <paper-dialog id="options">
+      <h2>Options</h2>
+      <paper-input always-float-label label="Light threshold" value="{{threshold}}" type="number"></paper-input>
+
+      <paper-input always-float-label label="Log data every (miliseconds)" value="{{interval}}" type="number">
+      </paper-input>
+
+      <div class="buttons">
+        <paper-button dialog-dismiss>Cancel</paper-button>
+        <paper-button dialog-confirm autofocus on-click="updateProperties">Save</paper-button>
+      </div>
+    </paper-dialog>
+  </template>
+
+  <script>
+class tesselClimate {
+  beforeRegister(){
+    this.is = "tessel-climate";
+    this.properties = {
+      state: String,
+      uuid: String,
+      temperature: Number,
+      humidity: Number
+    };
+  }
+
+  get behaviors(){
+    return [mwcMixin]
+  }
+
+  get trackers (){
+    return [
+      "subThing(uuid)",
+      "tempData(uuid)",
+
+    ];
+  }
+
+  toggleDialog () {
+    this.$.options.open()
+  }
+
+  tempData (uuid) {
+    if(uuid){
+      this.subscribe('Thing.events', uuid, 'temperature');
+      let events = Events.find().fetch();
+      if (!_.isUndefined(events)) {
+        let event = events.pop();
+        if (!_.isUndefined(event)) {
+          if (event.event.type === 'temperature') {
+            this.set('temperature', event.event.value);
+          }
+        }
+      }
+    }
+  }
+
+  humData (uuid) {
+    if(uuid){
+      this.subscribe('Thing.events', uuid, 'humidity');
+      let events = Events.find().fetch();
+      if (!_.isUndefined(events)) {
+        let event = events.pop();
+        if (!_.isUndefined(event)) {
+          if (event.event.type === 'humidity') {
+            this.set('humidity', event.event.value);
+          }
+        }
+      }
+    }
+  }
+
+  subThing (uuid) {
+    if (uuid) {
+      this.subscribe('Things.one', uuid);
+    }
+  }
+}
+
+Polymer(tesselClimate);
+  </script>
+</dom-module>
