@@ -17,6 +17,8 @@ class thingDisplay {
           "weather-widget",
           "smart-light",
           "smart-pot",
+          "tessel-climate",
+          "temp-controller"
         ],
       },
       loader:Number,
