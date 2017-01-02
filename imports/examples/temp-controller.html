@@ -14,7 +14,7 @@
   float: right;
 }
     </style>
-    <h2>Smart light
+    <h2>Temperature controller
     <paper-icon-button class="pull-right"
                        icon="settings"
                        on-click="toggleDialog">
@@ -22,9 +22,9 @@
     </h2>
   
 
-    <!-- <temperature-gauge></temperature-gauge> -->
+    <temperature-gauge temperature="{{temperature}}"></temperature-gauge>
 
-    <paper-input always-float-label label="Target temperature" value="{{threshold}}" type="number"></paper-input>
+    <paper-input always-float-label label="Target temperature" value="{{target}}" type="number"></paper-input>
 
     <p>Heater {{state}}</p>
 
@@ -55,11 +55,13 @@ class tempContoller {
     this.is = "temp-controller";
     this.properties = {
       state: String,
-      lightconditions: String,
-      light: Number,
+      temperature: {
+        type: Number,
+        value: 57
+      },
       threshold: Number,
       interval: Number,
-      events: Array,
+      target: Number,
       token: String,
       uuid: String
     };
@@ -73,20 +75,19 @@ class tempContoller {
     return [
       "subThing(uuid)",
       "setState(uuid)",
-      "lightData(uuid)"
+      "tempData(uuid)"
     ];
   }
 
-  lightData (uuid) {
+  tempData (uuid) {
     if(uuid){
-      this.subscribe('Thing.events', uuid, 'light');
+      this.subscribe('Thing.events', uuid, 'temperature');
       let events = Events.find().fetch();
-      this.set('events', events);
       if (!_.isUndefined(events)) {
         let event = events.pop();
         if (!_.isUndefined(event)) {
-          if (event.event.type === 'light') {
-            this.set('light', event.event.value);
+          if (event.event.type === 'temperature') {
+            this.set('temperature', event.event.value);
           }
         }
       }
@@ -101,6 +102,8 @@ class tempContoller {
     this.sendCommand(e.target.dataset.method);
   }
 
+  // Need a less hacky way of doing this.
+  // observers?
   updateProperties () {
     let interval = {
       key: 'interval',
@@ -133,7 +136,6 @@ class tempContoller {
         this.set('token', thing.token);
         if (!_.isUndefined(thing.properties)) {
           this.set('state', thing.properties.state);
-          this.set('lightconditions', thing.properties.lightconditions);
           this.set('threshold', thing.properties.threshold);
           this.set('interval', thing.properties.interval);
         }

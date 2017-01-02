@@ -1,0 +1,386 @@
+<link rel="import" href="../../bower_components/polymer/polymer.html"/>
+<link rel="import" href="../../bower_components/iron-flex-layout/iron-flex-layout.html"/>
+<link rel="import" href="../../bower_components/iron-flex-layout/iron-flex-layout-classes.html"/>
+<script src="lib/d3.js"></script>
+
+<!--
+`d3-flextree-polymer`
+
+From https://github.com/lcahlander/d3-flextree-polymer
+
+@demo demo/index.html 
+-->
+
+<dom-module id="d3-flextree-polymer">
+  <template>
+<style is="custom-style">
+  .general {
+    width: 98%;
+    height: 90%;
+  }
+  .general > div {
+    padding: 4px;
+    margin: 12px;
+  }
+  .relative {
+    @apply(--layout-relative);
+    @apply(--layout-vertical);
+  }
+  .fit {
+    @apply(--layout-fit);
+  }
+  path.link {
+    fill: none;
+    stroke: #ccc;
+    stroke-width: 1.0px;
+  }
+  svg {
+    border-radius: 25px;
+    background-color: var(--d3-flextree-background-color, #ddd);
+    border: 2px solid var(--d3-flextree-border-color, #73AD21);
+    padding: 5px; 
+  }
+  g.selected rect {
+  stroke: black;
+  stroke-width: 3.0px;
+  }
+  g.selected polygon {
+  stroke: black;
+  stroke-width: 3.0px;
+  }
+  g.selected circle {
+  stroke: black;
+  stroke-width: 3.0px;
+  }
+</style>
+
+<div class="general">
+  <div class="relative" style="height: 100%;">
+    <div class="fit" id="drawing"></div>
+  </div>
+</div>
+  </template>
+
+  <script>
+
+    var d3TreeSVG;
+    var d3TreeSVG_g;
+    var d3Polymer;
+    var engine;
+    var selected_g = null;
+
+    Polymer({
+
+      is: 'd3-flextree-polymer',
+
+      properties: {
+        tree: {
+          type: Object,
+          notify: true,
+          observer: '_treeChanged',
+          value: {
+		  "x" : 0.0,
+		  "y" : 0.0,
+		  "x_size" : 20.0,
+		  "y_size" : 70.0,
+		  "children" : [ {
+		    "x" : -20.0,
+		    "y" : 70.0,
+		    "x_size" : 20.0,
+		    "y_size" : 200.0,
+		    "children" : [ {
+		      "x" : -30.0,
+		      "y" : 270.0,
+		      "x_size" : 20.0,
+		      "y_size" : 70.0,
+		      "children" : [ ]
+		    }, {
+		      "x" : -10.0,
+		      "y" : 270.0,
+		      "x_size" : 20.0,
+		      "y_size" : 70.0,
+		      "children" : [ ]
+		    } ]
+		  }, {
+		    "x" : 20.0,
+		    "y" : 70.0,
+		    "x_size" : 20.0,
+		    "y_size" : 70.0,
+		    "children" : [ {
+		      "x" : 20.0,
+		      "y" : 140.0,
+		      "x_size" : 20.0,
+		      "y_size" : 70.0,
+		      "children" : [ ]
+		    } ]
+		  } ]
+		}
+        },
+        selected: {
+          type: Object,
+          notify: true
+        }
+      },
+
+      created: function() {
+        console.log(this.localName + '#' + this.id + ' was created');
+      },
+
+      ready: function() {
+        d3Polymer = this;
+        
+        console.log(this.localName + '#' + this.id + ' has local DOM initialized');
+      	this.scopeSubtree(this.$.drawing, true);
+      	d3TreeSVG = d3.select(this.$.drawing)
+                      .append("svg")
+                      .attr("width", "100%")
+                      .attr("height", "100%");
+        d3TreeSVG_g = d3TreeSVG.append("g");
+        engine = d3.layout.tree().setNodeSizes(true);
+        this._treeChanged();
+      },
+
+      attached: function() {
+        console.log(this.localName + '#' + this.id + ' was attached');
+      },
+
+      detached: function() {
+        console.log(this.localName + '#' + this.id + ' was detached');
+      },
+
+      attributeChanged: function(name, type) {
+        console.log(this.localName + '#' + this.id + ' attribute ' + name +
+          ' was changed to ' + this.getAttribute(name));
+      },
+
+      _treeChanged: function() {
+        d3Polymer = this;
+      	if (d3TreeSVG == null) return;
+        if (this.tree == null) return;
+        
+        d3TreeSVG_g.html('');
+        
+        this._update(this.tree);
+      },
+      
+      _update(source) {
+
+        this.scopeSubtree(this.$.drawing, true);
+
+        engine.spacing(function(a, b) {
+          return a.parent == b.parent ? 
+            0 : engine.rootXSize();
+        });
+
+        engine.nodeSize(function(t) {
+          return [t.x_size, t.y_size];
+        });
+
+        // First get the bag of nodes in the right order
+        var nodes = d3.layout.hierarchy()(source);
+
+        console.log(this.localName + '#' + this.id + ' has ' + nodes.length + ' nodes.');
+        var last_id = 0;
+        var node = d3TreeSVG_g.selectAll(".node")
+	    .data(nodes, function(d) { 
+	      return d.id || (d.id = ++last_id); 
+	    })
+	  .enter().append("g")
+	    .attr("class", "node")
+            ;
+
+        // *Now* do the layout
+        nodes = engine.nodes(source);
+
+        // Get the extents, average node area, etc.
+        function node_extents(n) {
+          return [n.x - n.x_size/2, n.y,
+                  n.x + n.x_size/2, n.y + n.y_size];
+        }
+        var root_extents = node_extents(nodes[0]);
+        var xmin = root_extents[0],
+            ymin = root_extents[1],
+            xmax = root_extents[2],
+            ymax = root_extents[3],
+            area_sum = (xmax - xmin) * (ymax - ymin),
+            x_size_min = nodes[0].x_size,
+            y_size_min = nodes[0].y_size;
+
+        nodes.slice(1).forEach(function(n) {
+          var ne = node_extents(n);
+          xmin = Math.min(xmin, ne[0]);
+          ymin = Math.min(ymin, ne[1]);
+          xmax = Math.max(xmax, ne[2]);
+          ymax = Math.max(ymax, ne[3]);
+          area_sum += (ne[2] - ne[0]) * (ne[3] - ne[1]);
+          x_size_min = Math.min(x_size_min, n.x_size);
+          y_size_min = Math.min(y_size_min, n.y_size);
+        });
+        var area_ave = area_sum / nodes.length;
+        // scale such that the average node size is 400 px^2
+        console.log("area_ave = " + area_ave);
+        var scale = 80 / Math.sqrt(area_ave);
+        console.log("extents = %o", {
+          xmin: xmin, ymin: ymin, xmax: xmax, ymax: ymax,
+        });
+        console.log("scale = " + scale);
+
+        // Functions to get the derived svg coordinates given the tree node
+        // coordinates.
+        // Note that the x-y orientations between the svg and the tree drawing 
+        // are reversed.
+
+        function svg_x(node_y) { return (node_y - ymin) * scale; }
+        function svg_y(node_x) { return (node_x - xmin) * scale; }
+
+
+        // FIXME: need to implement these -- the max value should not
+        // be scaled.
+
+        // The node box is drawn smaller than the actual node width, to
+        // allow room for the diagonal. Note that these are in units of
+        // svg drawing coordinates (not tree node coordinates)
+        var nodebox_right_margin = Math.min(x_size_min * scale, 60);
+        // And smaller than the actual node height, for spacing
+        var nodebox_vertical_margin = Math.min(y_size_min * scale, 6);
+
+
+        function rand() {
+          return 80 + Math.floor(Math.random() * 100);
+        }
+
+        var filler = function() {
+              return "fill: rgb(" + rand() + "," + rand() + "," + rand() + ")";
+            };
+
+        // Reposition everything according to the layout
+        node.attr("transform", function(d) { 
+            return "translate(" + svg_x(d.y) + "," + svg_y(d.x) + ")"; 
+          });
+          
+          var links = engine.links(nodes);
+          var links = d3TreeSVG_g.selectAll(".link")
+                                .data(links)
+                                .enter().append("path")
+                                .attr("class", "link")
+                                .attr("d", function(d) {
+                                var x1 = svg_x(d.source.y + d.source.y_size - nodebox_right_margin/scale),
+                                y1 = svg_y(d.source.x),
+                                x2 = svg_x(d.target.y),
+                                y2 = svg_y(d.target.x),
+                                dia;
+          
+          dia = 'M' + x1 + ',' + y1 + 'H' + ((x1 + x2) / 2) + 'V' + y2 + 'h' + ((x2 - x1) / 2);
+          
+          return dia; 
+          });
+          
+          node.html( function(d) { return d._draw ? d._draw : ''; })
+          .filter(function(d) { return (d._draw) ? true : false; })
+          .on('click', function(d) {
+          d3Polymer.selected = d;
+          toggle(d);
+          d3Polymer._update(d);
+          if (selected_g) {
+            selected_g.classList.remove("selected");
+          };
+          this.classList.add("selected");
+          selected_g = this;
+          });
+          
+          node.append("rect")
+          .filter(function(d) { return (d._draw) ? false : true; })
+          .attr("data-id", function(d) {
+              return d.id;
+            })
+            .attr({
+              x: 0,
+              y: function(d) { 
+                return -(d.x_size * scale - nodebox_vertical_margin) / 2; 
+              },
+              rx: 6,
+              ry: 6,
+              width: function(d) { 
+                return d.y_size * scale - nodebox_right_margin;
+              },
+              height: function(d) { 
+                return d.x_size * scale - nodebox_vertical_margin; 
+              },
+              style: filler,
+            })
+            .on('click', function(d) {
+              d3Polymer.selected = d;
+              toggle(d);
+              d3Polymer._update(d);
+            })
+        ;
+        
+        node.append("text")
+        .filter(function(d) { return (d._draw) ? false : true; })
+        .attr("x", 5)
+        .attr("y", 5)
+        .attr("dy", ".15em")
+        .attr('class', 'nodeText')
+        .attr("text-anchor", function(d) {
+        return "start";
+        })
+        .text(function(d) {
+        return "Hello";
+        });
+        
+        // This controls the lines between the nodes; see
+        // https://github.com/mbostock/d3/wiki/SVG-Shapes#diagonal_projection
+        var diagonal = d3.svg.diagonal()
+          .source(function(d, i) {
+            var s = d.source;
+            return {
+              x: s.x, 
+              y: s.y + s.y_size - nodebox_right_margin/scale,
+            };
+          })
+          .projection(function(d) { 
+            return [svg_x(d.y), svg_y(d.x)]; 
+          })
+        ;
+
+
+	d3TreeSVG.call(d3.behavior.zoom()
+                              .scaleExtent([0.5, 5])
+                              .on("zoom", zoom));
+
+	// Toggle children.
+	function toggle(d) {
+	    if (d.children) {
+		d._children = d.children;
+		d.children = null;
+	    } else {
+		d.children = d._children;
+		d._children = null;
+	    }
+	    
+	}
+
+	function zoom() {
+            var m = [40, 240, 40, 240];
+            var h = this.clientHeight;
+            var w = this.clientWidth;
+	    var scale = d3.event.scale,
+		translation = d3.event.translate,
+		tbound = -h * scale,
+		bbound = h * scale,
+		lbound = (-w + m[1]) * scale,
+		rbound = (w - m[3]) * scale;
+	    // limit translation to thresholds
+	    translation = [
+		Math.max(Math.min(translation[0], rbound), lbound),
+		Math.max(Math.min(translation[1], bbound), tbound)
+	    ];
+	    d3TreeSVG_g
+		.attr("transform", "translate(" + translation + ")" +
+		      " scale(" + scale + ")");
+	}
+      }
+
+    });
+  </script>
+</dom-module>
